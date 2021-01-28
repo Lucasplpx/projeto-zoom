@@ -22,6 +22,7 @@ class Business {
 
   async _init() {
     this.view.configureRecordButton(this.onRecordPressed.bind(this));
+    this.view.configureLeaveButton(this.onLeavePressed.bind(this));
 
     this.currentStream = await this.media.getCamera();
     this.socket = this.socketBuilder
@@ -47,7 +48,7 @@ class Business {
       recorderInstance.startRecording();
     }
 
-    const isCurrentId = false;
+    const isCurrentId = userId === this.currentPeer.id;
     this.view.renderVideo({
       userId,
       stream,
@@ -71,6 +72,7 @@ class Business {
       }
 
       this.view.setParticipants(this.peers.size);
+      this.stopRecording(userId);
       this.view.removeVideoElement(userId);
     };
   }
@@ -98,6 +100,11 @@ class Business {
   onPeerStreamReceived() {
     return (call, stream) => {
       const callerId = call.peer;
+      if (this.peers.has(callerId)) {
+        console.log('calling twice, ignoring second call...', callerId);
+        return;
+      }
+      
       this.addVideoStream(callerId, stream);
       this.peers.set(callerId, { call });
 
@@ -130,7 +137,7 @@ class Business {
 
   // se um usuario entrar e sair da call durante uma gravacao
   // precisamos parar as gravacoes anteriores dele
-  async stopRecording(key) {
+  async stopRecording(userId) {
     const usersRecordings = this.usersRecordings;
     for (const [key, value] of usersRecordings) {
       const isContextUser = key.includes(userId);
@@ -139,7 +146,19 @@ class Business {
       const rec = value;
       const isRecordingActive = rec.recordingActive;
       if (!isRecordingActive) continue;
-      await rec.stopRecording(key);
+      this.playRecordings(key);
     }
+  }
+
+  playRecordings(userId) {
+    const user = this.usersRecordings.get(userId);
+    const videosURLs = user.getAllVideoURLs();
+    videosURLs.map((url) => {
+      this.view.renderVideo({ url, userId });
+    });
+  }
+
+  onLeavePressed() {
+    this.usersRecordings.forEach((value, key) => value.download());
   }
 }
